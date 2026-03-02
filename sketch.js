@@ -14,8 +14,8 @@ const db = firebase.database();
 
 const scaleFromOrginal = 1.5;
 
-
-
+let mapsTextInput = false;
+let editor_radio = false;
 
 let curScreen;
 let sW = 700;

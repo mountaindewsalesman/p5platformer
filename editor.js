@@ -11,7 +11,6 @@ let editor_selectedRect = -1;
 let editor_rectEditType = 0;
 
 
-let editor_radio = false;
 let editor_testingLevel = false;
 
 let editorGridVal = 1;
