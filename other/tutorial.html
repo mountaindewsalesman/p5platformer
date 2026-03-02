@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Editor Tutorial</title>
+</head>
+<body>
+    <h1>Editor Tutorial</h1>
+    <p>This tutorial will guide you through the features of the editor.</p>
+    <h2>Camera Controls</h2>
+    <p> The camera allows you to view different areas of the level you are editing. </p>
+    <ul>
+        <li>Move camera: WASD or arrow kets</li>
+        <li>Move camera faster: hold [shift]</li>
+        <li>Zoom in: Q/-</li>
+        <li>Zoom out: E/+</li>
+    </ul>
+    <p> The camera zooms relative to the center of the screen. </p>
+    <h2>Map Editing</h2>
+    <p> The editor allows you to edit the level layout by adding and modifying platforms. </p>
+    <ul>
+        <li><b>Editing Platforms</b></li>
+        <li>Move level spawn: X <br> &nbsp; The level spawn is where the player will spawn in for each level, represented by a blue square. When you press X, the spawn will move to the mouse position. </li>
+        <li>Create new platform: P <br> &nbsp; Pressing P will create a new platform at the mouse position.</li>
+        <li>Edit a platform: Mouse <br> &nbsp; To edit a platform, hover the mouse over it and use the provided controls. The upper left corner changes the position, the lower right corner changes the size. Buttons on the inside change the material and allow you to delete a platform. </li>
+        
+        <br>
+        <li><b>Platform Materials</b></li>
+        <li>Different colors are for different types/materials of platforms, as follows:</li>
+        <li>Green (ground)<br> &nbsp; The ground platform is the default material, and is used for the main surfaces the player can be on. The player cannot pass through the ground. </li>
+        <li>Brown (wood)<br> &nbsp; The wood platform is like the ground, but it can be passed through from the bottom up. In the old version, if the player simply had negitive velocity and was intersecting the wood, they would be teleported to the top; this led to situations where the player would seemingly teleport up. This has been fixed with the added condition that the bottom of the player must be at least 10 pixels or less below the wood surface for the player to go on top of the wood.</li>
+        <li>Red (death)<br> &nbsp; The player dies and goes back to the level spawnpoint when the touch it.</li>
+        <li>Magenta (bouncy) <br> &nbsp; The bouncy inflicts a large instantaneous upward velocity when the player touches it.</li>
+        <li>Yellow (win)<br> &nbsp; The player wins the level when they touch this platform, and advances to the next level. </li>
+        <li>Grey (tar)<br> &nbsp; This platform is the same as ground, except when it is a ceiling, the player may stick under it and jump out from it's corners.</li>
+        <li>Cyan (wall bounce) <br> &nbsp; The wall bounce platform allows the player to bounce off of it when jumping against it.</li>
+
+        <li><b>Death Y</b></li>
+        <li>If the player falls below a certain Y value, they will die and respawn at the level spawn. This Y value is represented in the level editor as a giant red rectangle; if the player falls into this rectangle, they die. By pressing the up and down buttons surrounding the red rectangle, you can change this Y value, and add more or less vertical space beneath your level. </li>
+
+        <br>
+        <li><b>Editing levels: Your map can have as many levels as you please.</b> </li>
+        <li>The current level is displayed in the lower left corner. </li>
+        <li>Add a new level after the current one: N</li>
+        <li>Delete the current level: M<br> &nbsp; This will remove the current level from the editor. You may not have under 1 level.</li>
+        <li>Switch to the next level: use the > or . key</li>
+        <li>Switch to the previous level: use the < or , key</li>
+        <li>You can test the current level by pressing T. You can exit the testing mode by pressing T again. </li>
+
+        <br>
+        <li><b>The Ruler</b></li>
+        <li>The ruler is a tool to gauge the distances between platforms to quickly check if jumps are possible. </li>
+        <li>The horozontal line represents the maximum flat horozontal distance the player can cover, given they have gained a fair amount of momentum.  </li>
+        <li>The vertical line represents the maximum vertical distance the player can jump. </li>
+        <li>The blue square is the size of the player itself. </li>
+        <li>The ruler is accessed by pressing R. </li>
+    </ul>
+    <p>The last level of a map should not include a win platform. If it does, the game will attempt to switch to the next level, which doesn't exist, resulting in a crash. Additionally, the timer automatically ends when the player reaches the last level. So, the last level should be the ending of your map. </p>
+
+    <br>
+    <h2>Uploading and Downloading</h2>
+    <p>Level data is stored as a .json. When you are done making a level, or you want to save it to work on it later, you can download the level with the download button. If you want to further edit this level, you can upload the downloaded file, edit it as you please, and then download it again. To upload a level to the cloud, once again, upload with the same .json file.</p>
+
+</body>
+</html>

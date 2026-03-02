@@ -1,0 +1,17 @@
+Database
+ - MapsInfo (key: Map IDs)
+  each one has
+   - name (str)
+   - creator (str)
+   - date created (str)
+   - completions (int)
+ - officialMapsInfo (same)
+ 
+ - MapsData (key: Map IDs)
+   - json Data
+ - Leaderboard Data (key: Map IDs)
+  each one has (max 50 childeren, when a new one is added slowest time is removed)
+   - Person(key: email adress)
+    each one has
+     - time
+

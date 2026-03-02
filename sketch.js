@@ -21,10 +21,22 @@ let curScreen;
 let sW = 700;
 let sH = 500;
 
+let materials = [
+    "ground", 
+    "die",
+    "wood",
+    "bounce",
+    "end",
+    "tar",
+    "wallJump"
+]
+
 let clickedThisFrame = false;
 //button thing
 
+
 function setup() {
+    textFont('Times New Roman');
     createCanvas(sW*scaleFromOrginal, sH*scaleFromOrginal);
     curScreen = "menu"
 
@@ -39,6 +51,9 @@ function setup() {
             console.log("User is not logged in.");
         }
     });
+    canvas = document.querySelector('canvas');
+    canvas.addEventListener('wheel', (e) => e.preventDefault(), { passive: false });
+
 }
 
 //
@@ -49,16 +64,16 @@ function draw() {
     scale(scaleFromOrginal);
     
 
-    if(curScreen == "game"){
-        game_updateAndDraw();    
-    }
     if(curScreen == "editor"){
         editor_updateAndDraw();    
+    }
+    if(curScreen == "mapSel"){
+        mapSel_updateAndDraw();
     }
 
     //this should always be last so main menu button renders on top
     if(curScreen == "menu"){
-        mainMenu()
+        mainMenu();
     }else{
         if(button(10, 10, 70, 15, "Main Menu")){
             curScreen = "menu"
@@ -107,16 +122,41 @@ function draw() {
 }
 
 function mainMenu(){
-    background(50, 220, 255);
-    bW = 200
-    bH = 20
-    bX = sW/2 - bW/2
-    if(button(bX, 50, bW, bH, "Leagcy old game test")){
-        game_initMap(testMap);
-        curScreen = "game"
+    if(editor_radio){
+        editor_radio.remove();
+        editor_radio.hide()
+        
     }
-    if(button(bX, 80, bW, bH, "Editor")){
-        editor_loadMap(testMap);
+    if(mapsTextInput){
+        mapsTextInput.hide();
+    }
+    background(50, 220, 255);
+    textAlign(CENTER, TOP);
+    textSize(70);
+    fill(0);
+    strokeWeight(0);
+    text("P5 PLATFORMER", sW/2, 50);
+    text("RELEASE 2", sW/2, 130);
+    textSize(20);
+    text("Level Editor, Cloud Sharing, Leaderboard and Timer, and more...", sW/2, 200);
+
+
+    bW = 400
+    bH = 30
+    bX = sW/2 - bW/2
+    if(button(bX, 300, bW, bH, "Official Maps")){
+        mapSel_startup("official")
+        curScreen = "mapSel"
+
+    }
+    if(button(bX, 340, bW, bH, "Community Maps")){
+        mapSel_startup("community")
+        curScreen = "mapSel"
+
+    }
+    
+    if(button(bX, 380, bW, bH, "Editor")){
+        editor_loadMap();
         curScreen = "editor"
     }
 }
@@ -126,33 +166,36 @@ function mousePressed() {
     clickedThisFrame = true;
 }
 
-function button(x, y, w, h, bText, label){
+function button(x, y, w, h, bText, col){
     strokeWeight(0.5)
     mX = mouseX/scaleFromOrginal
     mY = mouseY/scaleFromOrginal
-    if(label){
-        fill(0, 0, 0, 0)
-        strokeWeight(0)
-    }else{
-        if(mX > x && mY > y && mX < x+w && mY < y+h ){
-            fill(200)
-            if(clickedThisFrame){
-                return true;
-            }
-        }else{
-            fill(255)
-        }
 
-        rect(x, y, w, h)
+    let pressed = false;
+
+    if(mX > x && mY > y && mX < x+w && mY < y+h ){
+        fill(200)
+        if(clickedThisFrame){
+            pressed = true
+        }
+        
+    }else{
+        fill(255)
     }
     
+    rect(x, y, w, h)
     
     textAlign(CENTER, CENTER);
     textSize(h*(2/3));
-    fill(0)
+        
+    if(col){
+        fill(col)
+    }else{
+        fill(0)
+    }
     strokeWeight(0)
-    text(bText, x, y, w, h);
-    return false;
+    text(bText, x, y+h*0.06, w, h);
+    return pressed;
 }
 
 async function loginWithGoogle() {
