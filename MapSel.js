@@ -1,5 +1,5 @@
 let mapsTable;
-let mapsTextInput;
+let mapsTextInput = false;
 
 let mapSel_mapType = "official"
 let mapSel_sortBy = "dateCreated"
