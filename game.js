@@ -246,7 +246,9 @@ function game_moveCollide(leapHeight, wallBounce, jumpHeight, dt) {
             
             if(game_levelIndex == game_levelSet.length-1){
                 game_runningTimer = false
-                mapSel_completedLevel(game_lvlID, game_time)
+                if (game_currentType === "real") {
+                    mapSel_completedLevel(game_lvlID, game_time)
+                }
             }
         }
     }
