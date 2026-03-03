@@ -364,7 +364,7 @@ class leaderboard {
         this.x = 150
         this.y = 100
         this.w = sW - 300
-        this.h = sH - 250
+        this.h = sH - 290
         this.active = true;
     }
     draw(){

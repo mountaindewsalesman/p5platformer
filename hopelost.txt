@@ -1,0 +1,18 @@
+(function () {
+  const seen = new WeakSet();
+  const safe = JSON.stringify(editor_levelSet, function (key, value) {
+    if (typeof value === "object" && value !== null) {
+      if (seen.has(value)) return "[Circular]";
+      seen.add(value);
+    }
+    if (typeof value === "function") return "[Function]";
+    if (value instanceof Element) return "[DOM Element]";
+    return value;
+  }, 2);
+
+  const blob = new Blob([safe], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "dump.json";
+  a.click();
+})();
