@@ -310,8 +310,8 @@ function mapSel_completedLevel(id, time) {
         let board = snapshot.val() || {};
         // Use email up to the @ as name
         let user = "Anonymous";
-        if (auth.currentUser && auth.currentUser.email) {
-            user = auth.currentUser.email.split("@")[0];
+        if (auth.currentUser && auth.currentUser.displayName) {
+            user = auth.currentUser.displayName;
         }
         // Unique key for each run
         const entryKey = user + "_" + Date.now();
