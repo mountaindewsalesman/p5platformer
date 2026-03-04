@@ -136,12 +136,14 @@ function mainMenu(){
     fill(0);
     strokeWeight(0);
     text("P5 PLATFORMER", sW/2, 50);
-    text("RELEASE 2", sW/2, 130);
+    text("RELEASE 2.1", sW/2, 130);
     textSize(20);
     text("Level Editor, Cloud Sharing, Leaderboard and Timer, and more...", sW/2, 200);
+    textSize(16);
+    text("See changelog for up to date changes", sW/2, 220);
 
 
-    bW = 400
+    bW = 300
     bH = 30
     bX = sW/2 - bW/2
     if(button(bX, 260, bW, bH, "Official Maps")){
@@ -156,14 +158,14 @@ function mainMenu(){
     }
 
     if(auth.currentUser){
-        if(button(bX, 380, bW, bH, "Delete and Download Uploaded Maps")){
+        if(button(bX+(bW-bW*0.75)/2, 370, bW*0.75, bH*0.75, "Your Maps")){
             mapSel_startup("user")
             curScreen = "mapSel"
 
         }
     }
     
-    if(button(bX, 340, bW, bH, "Editor")){
+    if(button(bX+(bW-bW*0.75)/2, 340, bW*0.75, bH*0.75, "Editor")){
         editor_loadMap();
         curScreen = "editor"
     }
