@@ -14,12 +14,17 @@ let editor_rectEditType = 0;
 let editor_testingLevel = false;
 
 let editorGridVal = 1;
+
+let editor_cmZbuffer = [];
+let editor_zMax = 50;
+
 function editor_loadMap(){
     frameRate(60) //set so that cam movement is simple and constant
     editor_camZoom = 1;
     
     editor_levelIndex = 0;
     editor_levelSet = editor_defaultLevel;
+    updateUndoBuffer()
     editor_currentLevel = editor_levelSet[editor_levelIndex];
 
     let x = editor_currentLevel.startPos[0]
@@ -68,6 +73,7 @@ function editor_uploadDownloadBtn(){
                 try {
                     const uploadedLevelSet = JSON.parse(event.target.result);
                     editor_levelSet = uploadedLevelSet;
+                    updateUndoBuffer()
                     editor_levelIndex = 0;
                     editor_currentLevel = editor_levelSet[editor_levelIndex];
                     let x = editor_currentLevel.startPos[0]
@@ -84,6 +90,7 @@ function editor_uploadDownloadBtn(){
         input.click();
     }
 }
+
 
 function editor_updateAndDraw(){
     if(!editor_testingLevel){
@@ -191,10 +198,13 @@ function editor_render() {
 
     if(button(sW/2-20, (game_deathY- editor_camY)*editor_camZoom-14, 40, 12, "+")){
         editor_levelSet[editor_levelIndex].startPos[1] += 80;
+        
         editor_camY += 80;
         for(let i = 0; i < editor_levelSet[editor_levelIndex].rectData.length; i++){
             editor_levelSet[editor_levelIndex].rectData[i][1] += 80;
+
         }
+        updateUndoBuffer()
     }
     else if(button(sW/2-20, (game_deathY- editor_camY)*editor_camZoom+2, 40, 12, "-")){
         editor_levelSet[editor_levelIndex].startPos[1] -= 80;
@@ -202,6 +212,7 @@ function editor_render() {
         for(let i = 0; i < editor_levelSet[editor_levelIndex].rectData.length; i++){
             editor_levelSet[editor_levelIndex].rectData[i][1] -= 80;
         }
+        updateUndoBuffer()
     }
 
     //labels etc
@@ -221,6 +232,8 @@ function editor_render() {
     text("Move level spawn: X", 10, 200)
     text("Create new platform: P", 10, 212)
     text("Edit platform size/position: Hover mouse on platform, \n and drag buttons/click on platform", 10, 224)
+
+    text("UNDO: Z", 10, 248)
 
     text("Show Ruler: R", 10, 258)
     text(" - The ruler shows the player's size,  \n    max horizontal jump, \n    and max vertical jump. ", 10, 270)
@@ -243,6 +256,8 @@ function editor_render() {
 
 function editor_editRects(){
     let btnSize = 10
+    let curEditPlatform = false;
+
     for (let i = 0; i < editor_currentLevel.rectData.length; i++) {
         platform = editor_currentLevel.rectData[i];
 
@@ -256,39 +271,64 @@ function editor_editRects(){
 
         worldMX = editor_camX + mX / editor_camZoom;
         worldMY = editor_camY + mY / editor_camZoom;
-        if((worldMX > bx-btnSize/2 && worldMX < bx+bw+btnSize/2 && worldMY > by-btnSize/2 && worldMY < by+bh+btnSize/2 && editor_selectedRect == -1) || editor_selectedRect == i){
-            fill(255, 255, 255, 190)
-            strokeWeight(0.5);
-            centerSquare((bx - editor_camX)*editor_camZoom, (by - editor_camY)*editor_camZoom, btnSize)
-
-            if(editor_selectedRect == -1 && mouseIsPressed && mouseCenterSquare((bx - editor_camX)*editor_camZoom, (by - editor_camY)*editor_camZoom, btnSize)){
-                editor_selectedRect = i;
-                editor_rectEditType = "position"
-            }
-
-            lineOff = btnSize/2
-            line((bx - editor_camX)*editor_camZoom - lineOff, (by - editor_camY)*editor_camZoom, (bx - editor_camX)*editor_camZoom + lineOff, (by - editor_camY)*editor_camZoom);
-            line((bx - editor_camX)*editor_camZoom, (by - editor_camY)*editor_camZoom - lineOff, (bx - editor_camX)*editor_camZoom, (by - editor_camY)*editor_camZoom + lineOff);
-
-            fill(64, 255, 64)
-            circle((bx+bw - editor_camX)*editor_camZoom, (by+bh - editor_camY)*editor_camZoom, btnSize);
-
-            if(editor_selectedRect == -1 && mouseIsPressed && mouseCenterSquare((bx+bw - editor_camX)*editor_camZoom, (by+bh - editor_camY)*editor_camZoom, btnSize)){
-                editor_selectedRect = i;
-                editor_rectEditType = "scale"
-            }
-
-            btnH = 10
-            btnW = 40
-            if(button((bx+bw/2-(btnW/2)/editor_camZoom - editor_camX)*editor_camZoom, (by+bh/2-(btnH/2)/editor_camZoom - editor_camY)*editor_camZoom - btnH*0.75, btnW, btnH, "Material")){
-                editor_currentLevel.rectData[i][4] = materials[(materials.indexOf(editor_currentLevel.rectData[i][4]) + 1) % materials.length];
-            }
-            if(button((bx+bw/2-(btnW/2)/editor_camZoom - editor_camX)*editor_camZoom, (by+bh/2-(btnH/2)/editor_camZoom - editor_camY)*editor_camZoom + btnH*0.75, btnW, btnH, "Delete", color(255, 0, 0))){
-                editor_currentLevel.rectData.splice(i, 1);
-            }
-
+        if((worldMX > bx && worldMX < bx+bw && worldMY > by && worldMY < by+bh && editor_selectedRect == -1) || editor_selectedRect == i){
+            curEditPlatform = i
+        }
+        if(mouseCenterSquare((bx - editor_camX)*editor_camZoom, (by - editor_camY)*editor_camZoom, btnSize) || mouseCenterSquare((bx+bw - editor_camX)*editor_camZoom, (by+bh - editor_camY)*editor_camZoom, btnSize)){
+            curEditPlatform = i
         }
     }
+
+
+    if(curEditPlatform !== false){
+        i = curEditPlatform
+        platform = editor_currentLevel.rectData[i];
+
+        bx = platform[0]; //-= camX;
+        by = platform[1]; //-= camY;
+        bw = platform[2];
+        bh = platform[3];
+        
+        mX = mouseX/scaleFromOrginal
+        mY = mouseY/scaleFromOrginal
+
+        worldMX = editor_camX + mX / editor_camZoom;
+        worldMY = editor_camY + mY / editor_camZoom;
+
+
+        fill(255, 255, 255, 190)
+        strokeWeight(0.5);
+        centerSquare((bx - editor_camX)*editor_camZoom, (by - editor_camY)*editor_camZoom, btnSize)
+
+        
+
+        lineOff = btnSize/2
+        line((bx - editor_camX)*editor_camZoom - lineOff, (by - editor_camY)*editor_camZoom, (bx - editor_camX)*editor_camZoom + lineOff, (by - editor_camY)*editor_camZoom);
+        line((bx - editor_camX)*editor_camZoom, (by - editor_camY)*editor_camZoom - lineOff, (bx - editor_camX)*editor_camZoom, (by - editor_camY)*editor_camZoom + lineOff);
+
+        fill(64, 255, 64)
+        circle((bx+bw - editor_camX)*editor_camZoom, (by+bh - editor_camY)*editor_camZoom, btnSize);
+        btnH = 10
+        btnW = 40
+
+        if(editor_selectedRect == -1 && mouseIsPressed && mouseCenterSquare((bx - editor_camX)*editor_camZoom, (by - editor_camY)*editor_camZoom, btnSize)){
+            editor_selectedRect = i;
+            editor_rectEditType = "position"
+        }
+        else if(editor_selectedRect == -1 && mouseIsPressed && mouseCenterSquare((bx+bw - editor_camX)*editor_camZoom, (by+bh - editor_camY)*editor_camZoom, btnSize)){
+            editor_selectedRect = i;
+            editor_rectEditType = "scale"
+        }
+        else if(button((bx+bw/2-(btnW/2)/editor_camZoom - editor_camX)*editor_camZoom, (by+bh/2-(btnH/2)/editor_camZoom - editor_camY)*editor_camZoom - btnH*0.75, btnW, btnH, "Material")){
+            editor_currentLevel.rectData[i][4] = materials[(materials.indexOf(editor_currentLevel.rectData[i][4]) + 1) % materials.length];
+            updateUndoBuffer()
+        }
+        else if(button((bx+bw/2-(btnW/2)/editor_camZoom - editor_camX)*editor_camZoom, (by+bh/2-(btnH/2)/editor_camZoom - editor_camY)*editor_camZoom + btnH*0.75, btnW, btnH, "Delete", color(255, 0, 0))){
+            editor_currentLevel.rectData.splice(i, 1);
+            updateUndoBuffer()
+        }
+    }
+
     if(editor_selectedRect != -1){
         if(editor_rectEditType == "position"){
             editor_currentLevel.rectData[editor_selectedRect][0] = worldMX;
@@ -318,10 +358,7 @@ function editor_editRects(){
         }
         rect((round(bx/editorGridVal)*editorGridVal- editor_camX)*editor_camZoom, (round(by/editorGridVal)*editorGridVal- editor_camY)*editor_camZoom, round(bw/editorGridVal)*editorGridVal*editor_camZoom, round(bh/editorGridVal)*editorGridVal*editor_camZoom)
         stroke(0)
-        
-
-        
-    } 
+    }  
 }
 
 function editor_keyPresses(){
@@ -405,6 +442,7 @@ function keyPressed() {
                     ]
                 }
                 editor_levelSet.splice(editor_levelIndex+1, 0, newLevel);
+                updateUndoBuffer()
                 editor_levelIndex += 1;
                 editor_currentLevel = editor_levelSet[editor_levelIndex]
             }
@@ -413,6 +451,32 @@ function keyPressed() {
                 worldMY = editor_camY + mY / editor_camZoom;
                 editor_currentLevel.rectData.push([worldMX, worldMY, 80, 80, "ground"])
             }
+            if(keyCode === 90) { // Using keyCode is safer in p5.js keyPressed() than keyIsDown
+            
+            // Make sure we have a history to go back to (need at least 2 items)
+            if (editor_cmZbuffer.length > 1) {
+                
+                // 1. Throw away the current ruined state
+                editor_cmZbuffer.pop();
+                
+                // 2. Grab the previous state and DEEP COPY it so we don't corrupt the buffer
+                let previousState = editor_cmZbuffer[editor_cmZbuffer.length - 1];
+                editor_levelSet = JSON.parse(JSON.stringify(previousState));
+                
+                // 3. Safety check: In case we hit undo after adding a new level, 
+                // make sure our index isn't higher than the number of levels that exist!
+                if (editor_levelIndex >= editor_levelSet.length) {
+                    editor_levelIndex = editor_levelSet.length - 1;
+                }
+
+                // 4. RE-LINK THE POINTER so the screen actually updates!
+                editor_currentLevel = editor_levelSet[editor_levelIndex];
+                
+                console.log("Undo successful! Buffer size:", editor_cmZbuffer.length);
+            } else {
+                console.log("Nothing left to undo!");
+            }
+        }
 
             if(keyIsDown(77)){
                 confirmDelete = confirm("Are you sure you want to delete this level? This action cannot be undone.")
@@ -424,6 +488,7 @@ function keyPressed() {
                     return;
                 }
                 editor_levelSet.splice(editor_levelIndex, 1);
+                updateUndoBuffer()
                 editor_levelIndex = mod(editor_levelIndex, editor_levelSet.length)
                 editor_currentLevel = editor_levelSet[editor_levelIndex]
             }
@@ -460,6 +525,19 @@ function keyPressed() {
     }
 }
 
+function updateUndoBuffer(){
+    // 1. Take a clean snapshot (deep copy) of the level set right now
+    let snapshot = JSON.parse(JSON.stringify(editor_levelSet));
+    
+    // 2. Push the snapshot into the buffer, NOT the live reference
+    editor_cmZbuffer.push(snapshot);
+    
+    if(editor_cmZbuffer.length > editor_zMax){
+        editor_cmZbuffer.splice(0, 1);
+    }
+    console.log("updated, buffer size:", editor_cmZbuffer.length);
+}
+
 function centerSquare(x, y, l){
     square(x-l/2, y-l/2, l)
 }
@@ -477,6 +555,7 @@ function mouseReleased(){
 
         editor_selectedRect = -1;
         editor_rectEditType = 0;
+        updateUndoBuffer()
     }
 }
 function mouseCenterSquare(x, y, l){
