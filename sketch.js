@@ -141,34 +141,39 @@ function mainMenu(){
     text("Level Editor, Cloud Sharing, Leaderboard and Timer, and more...", sW/2, 200);
     textSize(16);
     text("See changelog for up to date changes", sW/2, 220);
+    if(button(sW/2-35, 240, 70, 15, "Change Log")){
+        window.open("other/changeLog.html", "_blank");
+    }
 
 
     bW = 300
     bH = 30
     bX = sW/2 - bW/2
-    if(button(bX, 260, bW, bH, "Official Maps")){
+    if(button(bX, 285, bW, bH, "Official Maps")){
         mapSel_startup("official")
         curScreen = "mapSel"
 
     }
-    if(button(bX, 300, bW, bH, "Community Maps")){
+    if(button(bX, 320, bW, bH, "Community Maps")){
         mapSel_startup("community")
         curScreen = "mapSel"
 
     }
 
+    if(button(bX+(bW-bW*0.75)/2, 355, bW*0.75, bH*0.75, "Editor")){
+        editor_loadMap();
+        curScreen = "editor"
+    }
+
+
     if(auth.currentUser){
-        if(button(bX+(bW-bW*0.75)/2, 370, bW*0.75, bH*0.75, "Your Maps")){
+        if(button(bX+(bW-bW*0.75)/2, 382, bW*0.75, bH*0.75, "Your Maps")){
             mapSel_startup("user")
             curScreen = "mapSel"
 
         }
     }
     
-    if(button(bX+(bW-bW*0.75)/2, 340, bW*0.75, bH*0.75, "Editor")){
-        editor_loadMap();
-        curScreen = "editor"
-    }
 }
 
 function mousePressed() {

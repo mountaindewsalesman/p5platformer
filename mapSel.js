@@ -18,7 +18,7 @@ let lead;
 function mapSel_startup(type){
     mapSel_inGame = false;
     mapSel_mapType = type || "official"
-    mapsTable = new p5table(50, 50, sW-100, sH-100, [{"": ""},], 11, 4);
+    mapsTable = new p5table(50, 50, sW-100, sH-100, [{"": ""},], 10, 4);
     mapsTextInput = createInput("");
     mapsTextInput.style("position", "absolute");
     mapsTextInput.style("transform", "top left");
