@@ -368,7 +368,7 @@ function game_render() {
   fill(0, 0, 255);
   rect(game_pX - game_camX, game_pY - game_camY, game_pW, game_pH);
 
-    if(game_timer){
+    if(game_timer && game_currentType == "real"){
         textAlign(RIGHT, BOTTOM);
         fill(0);
         strokeWeight(0);

@@ -144,18 +144,26 @@ function mainMenu(){
     bW = 400
     bH = 30
     bX = sW/2 - bW/2
-    if(button(bX, 300, bW, bH, "Official Maps")){
+    if(button(bX, 260, bW, bH, "Official Maps")){
         mapSel_startup("official")
         curScreen = "mapSel"
 
     }
-    if(button(bX, 340, bW, bH, "Community Maps")){
+    if(button(bX, 300, bW, bH, "Community Maps")){
         mapSel_startup("community")
         curScreen = "mapSel"
 
     }
+
+    if(auth.currentUser){
+        if(button(bX, 380, bW, bH, "Delete and Download Uploaded Maps")){
+            mapSel_startup("user")
+            curScreen = "mapSel"
+
+        }
+    }
     
-    if(button(bX, 380, bW, bH, "Editor")){
+    if(button(bX, 340, bW, bH, "Editor")){
         editor_loadMap();
         curScreen = "editor"
     }

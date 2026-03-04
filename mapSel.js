@@ -28,11 +28,13 @@ function mapSel_startup(type){
 
     if(mapSel_mapType == "official"){
         mapsTextInput.hide();
-        mapSel_fetchMaps()
-    }else{
+    }else if(mapSel_mapType == "community"){
         mapsTextInput.show();
-        mapSel_fetchMaps()
+    }else if(mapSel_mapType == "user"){
+        mapsTextInput.hide();   
     }
+    mapSel_fetchMaps(false, false, mapSel_mapType == "user")
+
     db.ref("MapsInfo").once("value", snapshot => {
     let totalMaps = snapshot.numChildren();
     mapSel_totalMaps = totalMaps;
@@ -40,8 +42,6 @@ function mapSel_startup(type){
     });
 }
 function mapSel_updateAndDraw() {
-    
-
     if(mapSel_inGame){
         game_updateAndDraw()
         mapsTextInput.hide();
@@ -50,6 +50,11 @@ function mapSel_updateAndDraw() {
         mapsTable.draw();
         //top UI
         //position text input
+
+        if(button(sW/2-40, 32, 80, 15, "Refresh")) {
+            mapSel_fetchMaps(false, false, mapSel_mapType === "user"); 
+        }
+
         if(mapSel_mapType == "official"){
             textAlign(CENTER, TOP);
             textSize(16);
@@ -59,7 +64,20 @@ function mapSel_updateAndDraw() {
             mapsTextInput.hide();
             
         }
-        if(mapSel_mapType == "community"){
+        else if(mapSel_mapType == "user"){
+            textAlign(CENTER, TOP);
+            textSize(16);
+            fill(0);
+            strokeWeight(0);
+            text("YOUR MAPS", sW/2, 10);
+            mapsTextInput.hide();
+
+            if (auth.currentUser && button(sW - (70 + 10), sH - (15 + 10), 70, 15, "Upload Map")) {
+                mapSel_uploadSetup();
+            }
+            
+        }
+        else if(mapSel_mapType == "community"){
             if (auth.currentUser && button(sW - (70 + 10), sH - (15 + 10), 70, 15, "Upload Map")) {
                 mapSel_uploadSetup();
             }
@@ -78,7 +96,7 @@ function mapSel_updateAndDraw() {
                 mapsTextInput.value("");
 
                 if (mapSel_sortBy !== "none") {
-                    mapSel_fetchMaps(false); // false means "Do a sort query"
+                    mapSel_fetchMaps(false, false, mapSel_mapType == "user"); // false means "Do a sort query"
                 }
             }
 
@@ -88,7 +106,7 @@ function mapSel_updateAndDraw() {
             mapsTextInput.size(150 * scaleFromOrginal, 11 * scaleFromOrginal);
             if(button(600, 32, 50, 16, "Search")){
                 mapSel_sortBy = "none"
-                mapSel_fetchMaps(true);
+                mapSel_fetchMaps(true, false, mapSel_mapType == "user");
 
             }
 
@@ -98,7 +116,7 @@ function mapSel_updateAndDraw() {
                     
                     // Call fetch Maps, passing the current search state, and TRUE for loadMore
                     let isCurrentlySearching = (mapSel_sortBy === "none");
-                    mapSel_fetchMaps(isCurrentlySearching, true); 
+                    mapSel_fetchMaps(isCurrentlySearching, true, mapSel_mapType == "user"); 
                     
                 }
             }
@@ -108,11 +126,15 @@ function mapSel_updateAndDraw() {
 }
 
 //giant ass function from llm cause i am so tired of firebase
-function mapSel_fetchMaps(isSearch = false, loadMore = false) {
+// Added 'isMyMaps' as the third parameter
+function mapSel_fetchMaps(isSearch = false, loadMore = false, isMyMaps = false) {
     let mapsRef = db.ref("MapsInfo");
     let query;
+    
+    // Safely get the user's UID (adjust based on your auth setup)
+    let currentUserUID = firebase.auth().currentUser ? firebase.auth().currentUser.uid : null;
 
-    // 1. Reset cursors if this is a brand new sort or search
+    // 1. Reset cursors if this is a brand new sort, search, or toggle
     if (!loadMore) {
         mapSel_lastNodeValue = null;
         mapSel_lastNodeKey = null;
@@ -120,39 +142,63 @@ function mapSel_fetchMaps(isSearch = false, loadMore = false) {
         mapsTable.data = []; // Clear the table
     }
 
-    if (mapSel_isLastPage) return; // Stop if there are no more maps to load
+    if (mapSel_isLastPage) return; 
 
-    // Firebase only sorts ascending (A-Z, 1-100). We must use limitToLast to get the "highest" numbers.
-    let isDescending = (!isSearch && (mapSel_sortBy === "dateCreated" || mapSel_sortBy === "completions"));
-    let fetchAmount = mapSel_pageSize + (loadMore ? 1 : 0); // Grab 1 extra if loading more to account for the cursor
+    // Fetch amount includes +1 when loading more to account for the overlapping cursor
+    let fetchAmount = mapSel_pageSize + (loadMore ? 1 : 0); 
 
-    if (isSearch) {
-        let searchTerm = mapsTextInput.value().toLowerCase().trim();
-        query = mapsRef.orderByChild("name_lower");
-        
-        if (loadMore && mapSel_lastNodeValue) {
-            query = query.startAt(mapSel_lastNodeValue, mapSel_lastNodeKey).endAt(searchTerm + "\uf8ff");
-        } else {
-            query = query.startAt(searchTerm).endAt(searchTerm + "\uf8ff");
+    // ==========================================
+    // BRANCH 1: SIMPLIFIED "MY MAPS" LOGIC
+    // ==========================================
+    if (isMyMaps) {
+        if (!currentUserUID) {
+            console.error("Cannot fetch user maps: No user logged in.");
+            return;
         }
-        query = query.limitToFirst(fetchAmount);
 
-    } else {
-        if (mapSel_sortBy === "none") return;
-        query = mapsRef.orderByChild(mapSel_sortBy);
+        query = mapsRef.orderByChild("creatorUID");
 
-        if (isDescending) {
-            // Descending logic (Newest/Highest)
-            if (loadMore && mapSel_lastNodeValue !== null) {
-                query = query.endAt(mapSel_lastNodeValue, mapSel_lastNodeKey);
-            }
-            query = query.limitToLast(fetchAmount);
+        if (loadMore && mapSel_lastNodeKey !== null) {
+            // Paginate: start exactly at this user's UID and the last map ID we saw.
+            // endAt ensures we don't accidentally spill over into another user's maps.
+            query = query.startAt(currentUserUID, mapSel_lastNodeKey).endAt(currentUserUID).limitToFirst(fetchAmount);
         } else {
-            // Ascending logic (Oldest/Lowest/A-Z)
-            if (loadMore && mapSel_lastNodeValue !== null) {
-                query = query.startAt(mapSel_lastNodeValue, mapSel_lastNodeKey);
+            // First page: just grab the first batch of this user's maps
+            query = query.equalTo(currentUserUID).limitToFirst(fetchAmount);
+        }
+    } 
+    // ==========================================
+    // BRANCH 2: ORIGINAL LOGIC (All Maps, Search, Sort)
+    // ==========================================
+    else {
+        let isDescending = (!isSearch && (mapSel_sortBy === "dateCreated" || mapSel_sortBy === "completions"));
+
+        if (isSearch) {
+            let searchTerm = mapsTextInput.value().toLowerCase().trim();
+            query = mapsRef.orderByChild("name_lower");
+            
+            if (loadMore && mapSel_lastNodeValue) {
+                query = query.startAt(mapSel_lastNodeValue, mapSel_lastNodeKey).endAt(searchTerm + "\uf8ff");
+            } else {
+                query = query.startAt(searchTerm).endAt(searchTerm + "\uf8ff");
             }
             query = query.limitToFirst(fetchAmount);
+
+        } else {
+            if (mapSel_sortBy === "none") return;
+            query = mapsRef.orderByChild(mapSel_sortBy);
+
+            if (isDescending) {
+                if (loadMore && mapSel_lastNodeValue !== null) {
+                    query = query.endAt(mapSel_lastNodeValue, mapSel_lastNodeKey);
+                }
+                query = query.limitToLast(fetchAmount);
+            } else {
+                if (loadMore && mapSel_lastNodeValue !== null) {
+                    query = query.startAt(mapSel_lastNodeValue, mapSel_lastNodeKey);
+                }
+                query = query.limitToFirst(fetchAmount);
+            }
         }
     }
 
@@ -162,16 +208,20 @@ function mapSel_fetchMaps(isSearch = false, loadMore = false) {
         
         snapshot.forEach(childSnapshot => {
             let mapData = childSnapshot.val();
-            // Filter
-            if (mapSel_mapType === "community" && mapData.official === true) return;
-            if (mapSel_mapType === "official" && mapData.official !== true) return;
+            
+            // Skip the official/community filter if the user is just looking at their own maps
+            if (!isMyMaps) {
+                if (mapSel_mapType === "community" && mapData.official === true) return;
+                if (mapSel_mapType === "official" && mapData.official !== true) return;
+            }
             
             mapData.id = childSnapshot.key;
             fetchedMaps.push(mapData);
         });
 
-        // Firebase always gives us the list ascending, so flip it if we wanted descending
-        if (isDescending) fetchedMaps.reverse();
+        // If we were sorting descending in the "All Maps" view, we need to flip the array
+        let isDescendingAllMaps = (!isMyMaps && !isSearch && (mapSel_sortBy === "dateCreated" || mapSel_sortBy === "completions"));
+        if (isDescendingAllMaps) fetchedMaps.reverse();
 
         // 3. Drop the overlapping cursor item if we are loading the next page
         if (loadMore && fetchedMaps.length > 0) fetchedMaps.shift(); 
@@ -185,21 +235,109 @@ function mapSel_fetchMaps(isSearch = false, loadMore = false) {
         if (fetchedMaps.length > 0) {
             let lastItem = fetchedMaps[fetchedMaps.length - 1];
             mapSel_lastNodeKey = lastItem.id;
-            mapSel_lastNodeValue = isSearch ? lastItem.name_lower : lastItem[mapSel_sortBy];
+            
+            // Set the value cursor (only strictly needed for the original logic, but safe to set)
+            if (!isMyMaps) {
+                mapSel_lastNodeValue = isSearch ? lastItem.name_lower : lastItem[mapSel_sortBy];
+            }
         }
 
         // 6. Format and append to the existing table data
-        let newTableData = fetchedMaps.map(m => ({
-            "Name": m.name,
-            "Creator": m.creator,
-            "Completions": m.completions,
-            "Date": new Date(m.dateCreated).toLocaleDateString(),
-            "Play": {"PLAY MAP": () => mapSel_loadMapByID(m.id)},
-            "Leaderboard": m.completions == 0 ? "No Completions" : {"VIEW LEADERBOARD": () => viewLeaderboard(m.id)}
-        }));
+        let newTableData
+        if(mapSel_mapType != "user"){
+            newTableData = fetchedMaps.map(m => ({
+                "Name": m.name,
+                "Creator": m.creator,
+                "Completions": m.completions,
+                "Date": new Date(m.dateCreated).toLocaleDateString(),
+                "Play": {"PLAY MAP": () => mapSel_loadMapByID(m.id)},
+                "Leaderboard": m.completions == 0 ? "No Completions" : {"VIEW LEADERBOARD": () => viewLeaderboard(m.id)}
+            }));
+        }else{
+            newTableData = fetchedMaps.map(m => ({
+                "Name": m.name,
+                "Completions": m.completions,
+                "Date": new Date(m.dateCreated).toLocaleDateString(),
+                "Download Map": {"DOWNLOAD": () => mapSel_downloadMap(m.id, m.name)},
+                "Delete Map": {"DELETE": () => mapSel_deleteMap(m.id)},
+                "Leaderboard": m.completions == 0 ? "No Completions" : {"VIEW LEADERBOARD": () => viewLeaderboard(m.id)}
+            }));
+        }
+        
 
         // Combine the old data with the newly loaded data!
         mapsTable.data = mapsTable.data.concat(newTableData);
+    });
+}
+
+function mapSel_deleteMap(id){
+    confirmation = confirm("Are you sure you want to delete your level off the cloud? It will be gone forever! Download it first if you want to save it!")
+    if(!confirmation){return;}
+
+    const updates = {};
+    updates["MapsInfo/" + id] = null;
+    updates["CommunityMapsData/" + id] = null;
+    updates["OfficialMapsData/" + id] = null; // Included just in case an admin is deleting
+    updates["MapsLeaderboard/" + id] = null;
+
+    // Execute the deletion
+    db.ref().update(updates)
+        .then(() => {
+            alert("Map successfully deleted!");
+            
+            // Refresh the table so the deleted map disappears from the screen
+            mapSel_fetchMaps(false, false, mapSel_mapType === "user"); 
+        })
+        .catch((error) => {
+            console.error("Error deleting map:", error);
+            alert("Error deleting map! Check your permissions or try again later.");
+        });
+}
+
+//also llm
+function mapSel_downloadMap(id, name) {
+    let mapRef;
+    
+    // 1. Point to the right database location based on the current tab
+    if (mapSel_mapType === "official") {
+        mapRef = db.ref("OfficialMapsData/" + id + "/maps");
+    } else {
+        mapRef = db.ref("CommunityMapsData/" + id + "/maps");
+    }
+
+    // 2. Fetch the data from Firebase
+    mapRef.once("value", snapshot => {
+        const mapData = snapshot.val();
+        
+        if (!mapData) {
+            alert("Error: Map data not found!");
+            return;
+        }
+
+        // 3. Ask for the filename (runs only AFTER data is fetched)
+        let filename = name
+        // Ensure the file has a .json extension
+        if (!filename.endsWith(".json")) {
+            filename += ".json";
+        }
+
+        // 4. Turn the fetched Firebase data into a formatted JSON string
+        const json = JSON.stringify(mapData, null, 2);
+        
+        // 5. Create the downloadable file
+        const blob = new Blob([json], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+
+        // 6. Trigger the browser download
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        
+        // 7. Clean up to prevent memory leaks
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
     });
 }
 
@@ -292,6 +430,7 @@ function mapSel_uploadMap(mapInfo, mapData, mapType) {
     db.ref().update(updates)
         .then(() => {
             alert("Map uploaded successfully!");
+            mapSel_fetchMaps(false, false, mapSel_mapType == "user")
         })
         .catch((error) => {
             console.error("Error uploading map:", error);
