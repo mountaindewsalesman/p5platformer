@@ -386,6 +386,10 @@ function game_render() {
         if(button(sW-240, sH-70, 110, 18, "Return to Levels")){
             mapSel_inGame = false;
         }
+    }else if(game_currentType == "real"){
+        if(button(90, 10, 110, 15, "Return to Levels")){
+            mapSel_inGame = false;
+        }
     }
 }
 function getQR(){

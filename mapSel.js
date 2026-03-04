@@ -271,23 +271,25 @@ function mapSel_fetchMaps(isSearch = false, loadMore = false, isMyMaps = false) 
 }
 
 function mapSel_deleteMap(id){
-    confirmation = confirm("Are you sure you want to delete your level off the cloud? It will be gone forever! Download it first if you want to save it!")
+    let confirmation = confirm("Are you sure you want to delete your level off the cloud? It will be gone forever! Download it first if you want to save it!");
     if(!confirmation){return;}
 
     const updates = {};
     updates["MapsInfo/" + id] = null;
     updates["CommunityMapsData/" + id] = null;
-    updates["OfficialMapsData/" + id] = null; // Included just in case an admin is deleting
     updates["MapsLeaderboard/" + id] = null;
+
+    // ONLY attempt to delete from official maps if the logged-in user is YOU
+    if (auth.currentUser && auth.currentUser.uid === 'xUPTOuFBjtb9cymUhnfDLdTz1kY2') {
+        updates["OfficialMapsData/" + id] = null; 
+    }
 
     // Execute the deletion
     db.ref().update(updates)
         .then(() => {
             alert("Map successfully deleted!");
-            
-            // Refresh the table so the deleted map disappears from the screen
             mapSel_fetchMaps(false, false, mapSel_mapType === "user"); 
-        })
+        }) 
         .catch((error) => {
             console.error("Error deleting map:", error);
             alert("Error deleting map! Check your permissions or try again later.");
@@ -541,4 +543,3 @@ function msToTime(duration) {
         .toString()
         .padStart(3, '0')}`;
 }
-
