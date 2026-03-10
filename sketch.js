@@ -145,6 +145,10 @@ function mainMenu(){
         window.open("other/changeLog.html", "_blank");
     }
 
+    if(button(sW/2-70, 260, 140, 20, "SUGGESTIONS BOX", color(255, 0, 0))){
+        window.open("https://docs.google.com/forms/d/1-ZVAwv7yn_Kqa65fEaF1NHJ_Mc_FOPtNSe9dGmo-qnI", "_blank");
+    }
+
 
     bW = 300
     bH = 30
