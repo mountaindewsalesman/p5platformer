@@ -362,6 +362,13 @@ function mapSel_loadMapByID(id){
         // Initialize the game with the map
         game_initMap(mapData, "real", 0, id);
         mapSel_inGame = true;
+
+        logSecureEvent('game_attempt', {
+            playType: 'started from menu',
+            mapType: mapSel_mapType,
+            mapID: id,
+        });
+
     });
 
 }

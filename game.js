@@ -394,5 +394,10 @@ function game_render() {
 function getQR(){
     if(keyIsDown(81) && keyIsDown(82) && curScreen == "mapSel" && (game_runningTimer || game_levelIndex == game_levelSet.length-1)){
         game_initMap(game_levelSet, "real", 0, game_lvlID)
+        logSecureEvent('game_attempt', {
+            playType: 'quick reset',
+            mapType: mapSel_mapType,
+            mapID: game_lvlID
+        });
     }
 }

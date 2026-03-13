@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Game Admin Command Center</title>
+    
+    <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+
+    <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-database-compat.js"></script>
+
+    <style>
+        /* DARK MODE & FULL SCREEN DEFAULTS */
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            background: #121212; 
+            color: #e0e0e0; 
+            margin: 0; 
+            padding: 20px; 
+            box-sizing: border-box;
+            min-height: 100vh;
+            overflow-x: hidden; /* Prevents horizontal scrolling */
+        }
+        
+        #dashboard-ui { display: none; display: flex; flex-direction: column; }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; width: 100%; }
+        .header h1 { margin: 0; color: #ffffff; letter-spacing: 1px; }
+        
+        /* THE NEW FULL-WIDTH LAYOUT */
+        .full-width-layout {
+            display: flex;
+            flex-direction: column;
+            gap: 30px;
+            width: 100%;
+        }
+
+        /* RESIZABLE FULL-WIDTH CARDS */
+        .card { 
+            background: #1e1e1e; 
+            border: 1px solid #333;
+            border-radius: 8px; 
+            padding: 20px; 
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5); 
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+            box-sizing: border-box;
+            
+            /* Changed to vertical resize only so it stays edge-to-edge */
+            resize: vertical; 
+            overflow: hidden; 
+            min-height: 400px; /* Made them a bit taller by default */
+        }
+        
+        .card h3 { margin-top: 0; color: #aaaaaa; border-bottom: 1px solid #333; padding-bottom: 10px; }
+        .chart-container { flex-grow: 1; min-height: 0; width: 100%; }
+
+        /* UI States */
+        #login-ui, #error-ui { display: none; }
+        button { background: #00E396; color: #121212; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-size: 16px; font-weight: bold; transition: 0.2s; }
+        button:hover { background: #00c280; transform: translateY(-2px); }
+        .btn-danger { background: #ff4560; color: white; }
+        .btn-danger:hover { background: #e03e54; }
+        .center-box { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 80vh; max-width: 500px; margin: 0 auto; text-align: center; }
+    </style>
+</head>
+<body>
+
+    <div id="login-ui" class="center-box card" style="resize: none;">
+        <h1 style="color: white;">System Initialization</h1>
+        <p>Awaiting Admin Authentication payload...</p>
+        <button onclick="loginAdmin()">Authenticate via Google</button>
+    </div>
+
+    <div id="error-ui" class="center-box card" style="resize: none;">
+        <h1 style="color: #ff4560;">403 Forbidden</h1>
+        <p>This UID is not recognized in the admin registry.</p>
+        <button class="btn-danger" onclick="logout()">Terminate Session</button>
+    </div>
+
+    <div id="dashboard-ui">
+        <div class="header">
+            <h1>Server Telemetry & Analytics</h1>
+            <button class="btn-danger" onclick="logout()">Disconnect</button>
+        </div>
+        
+        <div class="full-width-layout">
+            <div class="card">
+                <h3>Game Usage Over Time</h3>
+                <div id="time-chart" class="chart-container"></div>
+            </div>
+
+            <div class="card">
+                <h3>Map Popularity (Total Plays)</h3>
+                <div id="map-chart" class="chart-container"></div>
+            </div>
+
+            <div class="card">
+                <h3>Most Active Players</h3>
+                <div id="user-chart" class="chart-container"></div>
+            </div>
+        </div>
+    </div>
+
+
+<script>
+    // 1. YOUR CONFIG
+    const firebaseConfig = {
+        apiKey: "AIzaSyB_7U7Vu4NrBl78d1-qQlwd7HJTITV26bM",
+        authDomain: "game-28daa.firebaseapp.com",
+        databaseURL: "https://game-28daa-default-rtdb.firebaseio.com",
+        projectId: "game-28daa",
+        storageBucket: "game-28daa.firebasestorage.app",
+        messagingSenderId: "660572522405",
+        appId: "1:660572522405:web:e9a6bd85394209fc510a4c"
+    };
+    
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const db = firebase.database();
+
+    const ADMIN_UID = 'xUPTOuFBjtb9cymUhnfDLdTz1kY2';
+
+    // 2. AUTH LOGIC
+    auth.onAuthStateChanged(user => {
+        if (user) {
+            if (user.uid === ADMIN_UID) {
+                document.getElementById('login-ui').style.display = 'none';
+                document.getElementById('error-ui').style.display = 'none';
+                document.getElementById('dashboard-ui').style.display = 'flex'; 
+                loadAnalytics();
+            } else {
+                document.getElementById('login-ui').style.display = 'none';
+                document.getElementById('dashboard-ui').style.display = 'none';
+                document.getElementById('error-ui').style.display = 'flex';
+            }
+        } else {
+            document.getElementById('login-ui').style.display = 'flex';
+            document.getElementById('dashboard-ui').style.display = 'none';
+            document.getElementById('error-ui').style.display = 'none';
+        }
+    });
+
+    async function loginAdmin() {
+        const provider = new firebase.auth.GoogleAuthProvider();
+        provider.setCustomParameters({ prompt: 'select_account' });
+        try { await auth.signInWithPopup(provider); } 
+        catch (error) { console.error("Login failed:", error); }
+    }
+
+    function logout() { auth.signOut(); }
+
+    // 3. FETCH DATA
+    async function loadAnalytics() {
+        try {
+            const mapNames = {};
+            const mapsSnap = await db.ref('MapsInfo').once('value');
+            mapsSnap.forEach(child => {
+                mapNames[child.key] = child.val().name;
+            });
+
+            const analyticsSnap = await db.ref('AppAnalytics/game_attempt').once('value');
+            
+            const mapPopularity = {};
+            const playsByDate = {};
+            const userPopularity = {};
+
+            analyticsSnap.forEach(child => {
+                let event = child.val();
+                
+                // SKIPPING BAD DATA
+                if (!event.mapID) {
+                    return; 
+                }
+                
+                // FIXED: Now looking for mapID
+                let mapId = event.mapID;
+                let mapName = mapNames[mapId] || ("Unknown (ID: " + mapId + ")");
+                mapPopularity[mapName] = (mapPopularity[mapName] || 0) + 1;
+
+                if(event.timestamp) {
+                    let dateObj = new Date(event.timestamp);
+                    let dateString = dateObj.toISOString().split('T')[0]; 
+                    playsByDate[dateString] = (playsByDate[dateString] || 0) + 1;
+                }
+
+                let uid = event.user || "anonymous";
+                let displayUser = uid === "anonymous" ? "Anonymous" : uid.substring(0, 6) + "...";
+                userPopularity[displayUser] = (userPopularity[displayUser] || 0) + 1;
+            });
+
+            drawMapChart(mapPopularity);
+            drawTimeChart(playsByDate);
+            drawUserChart(userPopularity);
+
+        } catch (error) {
+            console.error("Error:", error);
+        }
+    }
+
+    // --- APEXCHARTS RENDER FUNCTIONS ---
+
+    function drawMapChart(dataObj) {
+        const sortedArray = Object.entries(dataObj).sort((a, b) => b[1] - a[1]);
+        const categories = sortedArray.map(item => item[0]);
+        const seriesData = sortedArray.map(item => item[1]);
+
+        var options = {
+            series: [{ name: 'Plays', data: seriesData }],
+            chart: { type: 'bar', height: '100%', width: '100%', toolbar: { show: false } },
+            theme: { mode: 'dark' }, 
+            plotOptions: { bar: { borderRadius: 4, horizontal: true } },
+            dataLabels: { enabled: true },
+            xaxis: { categories: categories },
+            colors: ['#00E396'],
+            background: 'transparent'
+        };
+
+        document.querySelector("#map-chart").innerHTML = ""; 
+        var chart = new ApexCharts(document.querySelector("#map-chart"), options);
+        chart.render();
+    }
+
+    function drawUserChart(dataObj) {
+        const sortedArray = Object.entries(dataObj).sort((a, b) => b[1] - a[1]);
+        const categories = sortedArray.slice(0, 10).map(item => item[0]);
+        const seriesData = sortedArray.slice(0, 10).map(item => item[1]);
+
+        var options = {
+            series: [{ name: 'Plays', data: seriesData }],
+            chart: { type: 'bar', height: '100%', width: '100%', toolbar: { show: false } },
+            theme: { mode: 'dark' }, 
+            plotOptions: { bar: { borderRadius: 4, horizontal: true } },
+            dataLabels: { enabled: true },
+            xaxis: { categories: categories },
+            colors: ['#FEB019'],
+            background: 'transparent'
+        };
+
+        document.querySelector("#user-chart").innerHTML = "";
+        var chart = new ApexCharts(document.querySelector("#user-chart"), options);
+        chart.render();
+    }
+
+    function drawTimeChart(dataObj) {
+        const sortedDates = Object.keys(dataObj).sort();
+        const seriesData = sortedDates.map(date => dataObj[date]);
+
+        var options = {
+            series: [{ name: 'Plays', data: seriesData }],
+            chart: { type: 'area', height: '100%', width: '100%', zoom: { enabled: false } },
+            theme: { mode: 'dark' }, 
+            dataLabels: { enabled: false },
+            stroke: { curve: 'smooth', width: 2 },
+            xaxis: { type: 'datetime', categories: sortedDates },
+            colors: ['#008FFB'],
+            fill: { type: 'gradient', gradient: { shadeIntensity: 1, opacityFrom: 0.4, opacityTo: 0.05, stops: [0, 90, 100] } },
+            background: 'transparent'
+        };
+
+        document.querySelector("#time-chart").innerHTML = "";
+        var chart = new ApexCharts(document.querySelector("#time-chart"), options);
+        chart.render();
+    }
+</script>
+</body>
+</html>

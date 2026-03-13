@@ -12,6 +12,15 @@ firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.database();
 
+const analytics = firebase.analytics();
+firebase.auth().onAuthStateChanged((user) => {
+  if (user) {
+    // Tell Analytics who is logged in
+    analytics.setUserId(user.uid); 
+  }
+});
+
+
 const scaleFromOrginal = 1.5;
 
 let mapsTextInput = false;
@@ -20,6 +29,8 @@ let editor_radio = false;
 let curScreen;
 let sW = 700;
 let sH = 500;
+
+let mainMenuPlay = false;
 
 let materials = [
     "ground", 
@@ -54,6 +65,8 @@ function setup() {
     canvas = document.querySelector('canvas');
     canvas.addEventListener('wheel', (e) => e.preventDefault(), { passive: false });
 
+    console.log("Firing test analytics event...");
+    
 }
 
 //
@@ -136,49 +149,64 @@ function mainMenu(){
     fill(0);
     strokeWeight(0);
     text("P5 PLATFORMER", sW/2, 50);
-    text("RELEASE 2.1", sW/2, 130);
     textSize(20);
-    text("Level Editor, Cloud Sharing, Leaderboard and Timer, and more...", sW/2, 200);
-    textSize(16);
-    text("See changelog for up to date changes", sW/2, 220);
-    if(button(sW/2-35, 240, 70, 15, "Change Log")){
+    text("RELEASE 2.3", sW/2, 130);
+    text("See changelog for up to date changes", sW/2, 150);
+    if(button(sW/2-50, 180, 100, 15, "Change Log")){
         window.open("other/changeLog.html", "_blank");
     }
-
-    if(button(sW/2-70, 260, 140, 20, "SUGGESTIONS BOX", color(255, 0, 0))){
+    if(button(sW/2-50, 200, 100, 15, "Suggestions Box")){
         window.open("https://docs.google.com/forms/d/1-ZVAwv7yn_Kqa65fEaF1NHJ_Mc_FOPtNSe9dGmo-qnI", "_blank");
     }
 
+    if(mainMenuPlay){
+        
 
-    bW = 300
-    bH = 30
-    bX = sW/2 - bW/2
-    if(button(bX, 285, bW, bH, "Official Maps")){
-        mapSel_startup("official")
-        curScreen = "mapSel"
+        bW = 400
+        bH = 40
+        bX = sW/2 - bW/2
 
-    }
-    if(button(bX, 320, bW, bH, "Community Maps")){
-        mapSel_startup("community")
-        curScreen = "mapSel"
-
-    }
-
-    if(button(bX+(bW-bW*0.75)/2, 355, bW*0.75, bH*0.75, "Editor")){
-        editor_loadMap();
-        curScreen = "editor"
-    }
+        if(button(bX, 265, bW, 20, "Return")){
+            mainMenuPlay = false
+        }
 
 
-    if(auth.currentUser){
-        if(button(bX+(bW-bW*0.75)/2, 382, bW*0.75, bH*0.75, "Your Maps")){
-            mapSel_startup("user")
+        if(button(bX, 295, bW, bH, "Official Maps")){
+            mapSel_startup("official")
             curScreen = "mapSel"
+        }
+
+        if(button(bX, 345, bW, bH, "Community Maps")){
+            mapSel_startup("community")
+            curScreen = "mapSel"
+        }
+
+        
+    }else{
+
+        bW = 400
+        bH = 40
+        bX = sW/2 - bW/2
+        if(button(bX, 250, bW, bH, "Play")){
+            mainMenuPlay = true;
 
         }
+        if(button(bX, 300, bW, bH, "Map Editor")){
+            editor_loadMap();
+            curScreen = "editor"
+
+        }
+
+        if(auth.currentUser){
+            if(button(bX, 350, bW, bH, "Manage Your Maps")){
+                mapSel_startup("user")
+                curScreen = "mapSel"
+
+            }
+        }
     }
-    
 }
+
 
 function mousePressed() {
     // This flips to true for exactly one frame
@@ -232,4 +260,20 @@ async function loginWithGoogle() {
     } catch (error) {
         console.error("Login failed:", error);
     }
+}
+
+function logSecureEvent(eventName, eventData = {}) {
+    // 1. Get the user's ID if they are logged in, otherwise label them 'anonymous'
+    let uid = auth.currentUser ? auth.currentUser.uid : "anonymous";
+
+    // 2. Add some standard data we always want to know
+    const payload = {
+        ...eventData,
+        user: uid,
+        timestamp: firebase.database.ServerValue.TIMESTAMP, // Gets exact time from Google's servers
+    };
+
+    // 3. Push it directly to your Realtime Database
+    db.ref("AppAnalytics/" + eventName).push(payload)
+      .catch(err => console.error("Silently failed to log event:", err)); 
 }
