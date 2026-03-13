@@ -12,7 +12,6 @@
     <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-database-compat.js"></script>
 
     <style>
-        /* DARK MODE & FULL SCREEN DEFAULTS */
         body { 
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
             background: #121212; 
@@ -21,14 +20,14 @@
             padding: 20px; 
             box-sizing: border-box;
             min-height: 100vh;
-            overflow-x: hidden; /* Prevents horizontal scrolling */
+            overflow-x: hidden; 
         }
         
-        #dashboard-ui { display: none; display: flex; flex-direction: column; }
+        #dashboard-ui { display: none; flex-direction: column; }
         .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; width: 100%; }
         .header h1 { margin: 0; color: #ffffff; letter-spacing: 1px; }
+        .header-buttons { display: flex; gap: 10px; }
         
-        /* THE NEW FULL-WIDTH LAYOUT */
         .full-width-layout {
             display: flex;
             flex-direction: column;
@@ -36,7 +35,6 @@
             width: 100%;
         }
 
-        /* RESIZABLE FULL-WIDTH CARDS */
         .card { 
             background: #1e1e1e; 
             border: 1px solid #333;
@@ -47,22 +45,21 @@
             flex-direction: column;
             width: 100%;
             box-sizing: border-box;
-            
-            /* Changed to vertical resize only so it stays edge-to-edge */
             resize: vertical; 
             overflow: hidden; 
-            min-height: 400px; /* Made them a bit taller by default */
+            min-height: 400px; 
         }
         
         .card h3 { margin-top: 0; color: #aaaaaa; border-bottom: 1px solid #333; padding-bottom: 10px; }
         .chart-container { flex-grow: 1; min-height: 0; width: 100%; }
 
-        /* UI States */
         #login-ui, #error-ui { display: none; }
-        button { background: #00E396; color: #121212; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-size: 16px; font-weight: bold; transition: 0.2s; }
+        button { background: #00E396; color: #121212; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-size: 14px; font-weight: bold; transition: 0.2s; }
         button:hover { background: #00c280; transform: translateY(-2px); }
         .btn-danger { background: #ff4560; color: white; }
         .btn-danger:hover { background: #e03e54; }
+        .btn-warning { background: #FEB019; color: #121212; }
+        .btn-warning:hover { background: #e59c15; }
         .center-box { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 80vh; max-width: 500px; margin: 0 auto; text-align: center; }
     </style>
 </head>
@@ -83,13 +80,21 @@
     <div id="dashboard-ui">
         <div class="header">
             <h1>Server Telemetry & Analytics</h1>
-            <button class="btn-danger" onclick="logout()">Disconnect</button>
+            <div class="header-buttons">
+                <button class="btn-warning" onclick="manualArchival()">Force Consolidate</button>
+                <button class="btn-danger" onclick="logout()">Disconnect</button>
+            </div>
         </div>
         
         <div class="full-width-layout">
             <div class="card">
-                <h3>Game Usage Over Time</h3>
+                <h3>Game Usage Over Time (Live)</h3>
                 <div id="time-chart" class="chart-container"></div>
+            </div>
+
+            <div class="card">
+                <h3>Archived Hourly Plays</h3>
+                <div id="hourly-chart" class="chart-container"></div>
             </div>
 
             <div class="card">
@@ -98,7 +103,7 @@
             </div>
 
             <div class="card">
-                <h3>Most Active Players</h3>
+                <h3>Most Active Players (Click to Copy UID)</h3>
                 <div id="user-chart" class="chart-container"></div>
             </div>
         </div>
@@ -152,32 +157,61 @@
 
     function logout() { auth.signOut(); }
 
-    // 3. FETCH DATA
+    // 3. MANUAL FRONTEND ARCHIVAL TRIGGER
+    async function manualArchival() {
+        if(!confirm("Are you sure you want to force consolidation? The Raspberry Pi should normally handle this.")) return;
+        
+        const now = Date.now();
+        const oneHourAgo = now - (60 * 60 * 1000);
+
+        try {
+            const oldDataSnap = await db.ref('AppAnalytics/game_attempt').orderByChild('timestamp').endAt(oneHourAgo).once('value');
+            if (!oldDataSnap.exists()) {
+                alert("No records older than 1 hour found to consolidate.");
+                return;
+            }
+
+            const count = oldDataSnap.numChildren();
+            const archiveDate = new Date(oneHourAgo);
+            archiveDate.setMinutes(0, 0, 0, 0); 
+            const archiveTimestamp = archiveDate.getTime(); 
+
+            const updates = {};
+            oldDataSnap.forEach(child => { updates[`AppAnalytics/game_attempt/${child.key}`] = null; });
+
+            const summaryRef = db.ref(`AppAnalytics/hourly_summaries/${archiveTimestamp}`);
+            await summaryRef.transaction(currentCount => (currentCount || 0) + count);
+
+            await db.ref().update(updates);
+            alert(`Successfully consolidated ${count} records!`);
+            loadAnalytics();
+
+        } catch (error) {
+            console.error("Data archival failed:", error);
+            alert("Consolidation failed. Check console.");
+        }
+    }
+
+    // 4. FETCH DATA
     async function loadAnalytics() {
         try {
             const mapNames = {};
             const mapsSnap = await db.ref('MapsInfo').once('value');
-            mapsSnap.forEach(child => {
-                mapNames[child.key] = child.val().name;
-            });
+            mapsSnap.forEach(child => { mapNames[child.key] = child.val().name; });
 
             const analyticsSnap = await db.ref('AppAnalytics/game_attempt').once('value');
-            
+            const hourlySnap = await db.ref('AppAnalytics/hourly_summaries').once('value');
+
             const mapPopularity = {};
             const playsByDate = {};
             const userPopularity = {};
+            const hourlyData = {};
 
             analyticsSnap.forEach(child => {
                 let event = child.val();
-                
-                // SKIPPING BAD DATA
-                if (!event.mapID) {
-                    return; 
-                }
-                
-                // FIXED: Now looking for mapID
-                let mapId = event.mapID;
-                let mapName = mapNames[mapId] || ("Unknown (ID: " + mapId + ")");
+                if (!event.mapID) return; 
+
+                let mapName = mapNames[event.mapID] || ("Unknown (ID: " + event.mapID + ")");
                 mapPopularity[mapName] = (mapPopularity[mapName] || 0) + 1;
 
                 if(event.timestamp) {
@@ -187,20 +221,45 @@
                 }
 
                 let uid = event.user || "anonymous";
-                let displayUser = uid === "anonymous" ? "Anonymous" : uid.substring(0, 6) + "...";
-                userPopularity[displayUser] = (userPopularity[displayUser] || 0) + 1;
+                userPopularity[uid] = (userPopularity[uid] || 0) + 1;
             });
+
+            hourlySnap.forEach(child => { hourlyData[child.key] = child.val(); });
 
             drawMapChart(mapPopularity);
             drawTimeChart(playsByDate);
             drawUserChart(userPopularity);
+            drawHourlyChart(hourlyData); 
 
-        } catch (error) {
-            console.error("Error:", error);
-        }
+        } catch (error) { console.error("Error:", error); }
     }
 
     // --- APEXCHARTS RENDER FUNCTIONS ---
+
+    function drawHourlyChart(dataObj) {
+        const sortedTimestamps = Object.keys(dataObj).sort((a, b) => Number(a) - Number(b));
+        const seriesData = sortedTimestamps.map(ts => dataObj[ts]);
+        
+        const categories = sortedTimestamps.map(ts => {
+            const date = new Date(Number(ts));
+            return date.toLocaleTimeString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+        });
+
+        var options = {
+            series: [{ name: 'Plays per Hour', data: seriesData }],
+            chart: { type: 'area', height: '100%', width: '100%', toolbar: { show: false } },
+            theme: { mode: 'dark' },
+            stroke: { curve: 'smooth', width: 2 },
+            dataLabels: { enabled: false },
+            xaxis: { categories: categories },
+            colors: ['#FF4560'], 
+            fill: { type: 'gradient', gradient: { shadeIntensity: 1, opacityFrom: 0.4, opacityTo: 0.05 } },
+            background: 'transparent'
+        };
+
+        document.querySelector("#hourly-chart").innerHTML = "";
+        new ApexCharts(document.querySelector("#hourly-chart"), options).render();
+    }
 
     function drawMapChart(dataObj) {
         const sortedArray = Object.entries(dataObj).sort((a, b) => b[1] - a[1]);
@@ -219,29 +278,44 @@
         };
 
         document.querySelector("#map-chart").innerHTML = ""; 
-        var chart = new ApexCharts(document.querySelector("#map-chart"), options);
-        chart.render();
+        new ApexCharts(document.querySelector("#map-chart"), options).render();
     }
 
     function drawUserChart(dataObj) {
         const sortedArray = Object.entries(dataObj).sort((a, b) => b[1] - a[1]);
-        const categories = sortedArray.slice(0, 10).map(item => item[0]);
-        const seriesData = sortedArray.slice(0, 10).map(item => item[1]);
+        const top10 = sortedArray.slice(0, 10);
+        
+        const fullUids = top10.map(item => item[0]);
+        const categories = fullUids.map(uid => uid === "anonymous" ? "Anonymous" : uid.substring(0, 6) + "...");
+        const seriesData = top10.map(item => item[1]);
 
         var options = {
             series: [{ name: 'Plays', data: seriesData }],
-            chart: { type: 'bar', height: '100%', width: '100%', toolbar: { show: false } },
+            chart: { 
+                type: 'bar', height: '100%', width: '100%', toolbar: { show: false },
+                events: {
+                    dataPointSelection: function(event, chartContext, config) {
+                        const index = config.dataPointIndex;
+                        const selectedUid = fullUids[index];
+                        if (selectedUid && selectedUid !== "anonymous") {
+                            navigator.clipboard.writeText(selectedUid).then(() => {
+                                alert("Copied UID to clipboard: \n" + selectedUid);
+                            }).catch(err => console.error("Could not copy text: ", err));
+                        }
+                    }
+                }
+            },
             theme: { mode: 'dark' }, 
             plotOptions: { bar: { borderRadius: 4, horizontal: true } },
             dataLabels: { enabled: true },
             xaxis: { categories: categories },
             colors: ['#FEB019'],
-            background: 'transparent'
+            background: 'transparent',
+            states: { hover: { filter: { type: 'lighten', value: 0.15 } } }
         };
 
         document.querySelector("#user-chart").innerHTML = "";
-        var chart = new ApexCharts(document.querySelector("#user-chart"), options);
-        chart.render();
+        new ApexCharts(document.querySelector("#user-chart"), options).render();
     }
 
     function drawTimeChart(dataObj) {
@@ -261,8 +335,7 @@
         };
 
         document.querySelector("#time-chart").innerHTML = "";
-        var chart = new ApexCharts(document.querySelector("#time-chart"), options);
-        chart.render();
+        new ApexCharts(document.querySelector("#time-chart"), options).render();
     }
 </script>
 </body>
