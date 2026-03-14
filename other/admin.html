@@ -158,6 +158,7 @@
     function logout() { auth.signOut(); }
 
     // 3. MANUAL FRONTEND ARCHIVAL TRIGGER
+    // 3. MANUAL FRONTEND ARCHIVAL TRIGGER
     async function manualArchival() {
         if(!confirm("Are you sure you want to force consolidation? The Raspberry Pi should normally handle this.")) return;
         
@@ -171,19 +172,40 @@
                 return;
             }
 
-            const count = oldDataSnap.numChildren();
-            const archiveDate = new Date(oneHourAgo);
-            archiveDate.setMinutes(0, 0, 0, 0); 
-            const archiveTimestamp = archiveDate.getTime(); 
-
             const updates = {};
-            oldDataSnap.forEach(child => { updates[`AppAnalytics/game_attempt/${child.key}`] = null; });
+            const hourlyCounts = {}; // Object to track counts per specific hour
 
-            const summaryRef = db.ref(`AppAnalytics/hourly_summaries/${archiveTimestamp}`);
-            await summaryRef.transaction(currentCount => (currentCount || 0) + count);
+            oldDataSnap.forEach(child => {
+                const event = child.val();
+                
+                if (event.timestamp) {
+                    // 1. Calculate the start of the hour for THIS specific event
+                    const eventDate = new Date(event.timestamp);
+                    eventDate.setMinutes(0, 0, 0, 0);
+                    const hourBucket = eventDate.getTime();
 
+                    // 2. Increment the tally for this specific hour bucket
+                    hourlyCounts[hourBucket] = (hourlyCounts[hourBucket] || 0) + 1;
+                }
+
+                // 3. Stage the original raw event for deletion
+                updates[`AppAnalytics/game_attempt/${child.key}`] = null; 
+            });
+
+            // 4. Update Firebase: Run a transaction for every unique hour bucket we found
+            const transactionPromises = Object.entries(hourlyCounts).map(([hourBucket, countToAdd]) => {
+                const summaryRef = db.ref(`AppAnalytics/hourly_summaries/${hourBucket}`);
+                return summaryRef.transaction(currentCount => (currentCount || 0) + countToAdd);
+            });
+
+            // Wait for all transactions to finish before deleting the raw data
+            await Promise.all(transactionPromises);
             await db.ref().update(updates);
-            alert(`Successfully consolidated ${count} records!`);
+            
+            const totalConsolidated = Object.values(hourlyCounts).reduce((a, b) => a + b, 0);
+            alert(`Successfully consolidated ${totalConsolidated} records into their respective hours!`);
+            
+            // Refresh the dashboard
             loadAnalytics();
 
         } catch (error) {
