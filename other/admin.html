@@ -162,20 +162,18 @@
     async function manualArchival() {
         if(!confirm("Are you sure you want to force consolidation? The Raspberry Pi should normally handle this.")) return;
         
-        const now = Date.now();
-        const oneHourAgo = now - (60 * 60 * 1000);
 
         try {
-            const oldDataSnap = await db.ref('AppAnalytics/game_attempt').orderByChild('timestamp').endAt(oneHourAgo).once('value');
-            if (!oldDataSnap.exists()) {
-                alert("No records older than 1 hour found to consolidate.");
+            const allDataSnap = await db.ref('AppAnalytics/game_attempt').once('value');
+            if (!allDataSnap.exists()) {
+                alert("No records found.");
                 return;
             }
 
             const updates = {};
             const hourlyCounts = {}; // Object to track counts per specific hour
 
-            oldDataSnap.forEach(child => {
+            allDataSnap.forEach(child => {
                 const event = child.val();
                 
                 if (event.timestamp) {
@@ -260,15 +258,35 @@
 
     function drawHourlyChart(dataObj) {
         const sortedTimestamps = Object.keys(dataObj).sort((a, b) => Number(a) - Number(b));
-        const seriesData = sortedTimestamps.map(ts => dataObj[ts]);
-        
-        const categories = sortedTimestamps.map(ts => {
-            const date = new Date(Number(ts));
-            return date.toLocaleTimeString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+        if (sortedTimestamps.length === 0) {
+            document.querySelector("#hourly-chart").innerHTML = "<p style='color:#666; padding:20px;'>No hourly data yet.</p>";
+            return;
+        }
+
+        const ONE_HOUR = 60 * 60 * 1000;
+        const minTs = Number(sortedTimestamps[0]);
+
+        // Round current time DOWN to the start of the current hour
+        const now = new Date();
+        now.setMinutes(0, 0, 0);
+        const maxTs = now.getTime();
+
+        const filledTimestamps = [];
+        const filledData = [];
+
+        for (let ts = minTs; ts <= maxTs; ts += ONE_HOUR) {
+            filledTimestamps.push(ts);
+            filledData.push(dataObj[ts] !== undefined ? dataObj[ts] : 0);
+        }
+
+        const categories = filledTimestamps.map(ts => {
+            const date = new Date(ts);
+            return date.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
         });
 
         var options = {
-            series: [{ name: 'Plays per Hour', data: seriesData }],
+            series: [{ name: 'Plays per Hour', data: filledData }],
             chart: { type: 'area', height: '100%', width: '100%', toolbar: { show: false } },
             theme: { mode: 'dark' },
             stroke: { curve: 'smooth', width: 2 },
