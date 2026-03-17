@@ -159,6 +159,11 @@ function mainMenu(){
         window.open("https://docs.google.com/forms/d/1-ZVAwv7yn_Kqa65fEaF1NHJ_Mc_FOPtNSe9dGmo-qnI", "_blank");
     }
 
+    if(button(sW/2-60, 220, 120, 15, "Cool Other Website I Made")){
+        window.open("https://mountaindewsalesman.github.io/Simple-Web-Chat/", "_blank");
+    }
+
+
     if(mainMenuPlay){
         
 
