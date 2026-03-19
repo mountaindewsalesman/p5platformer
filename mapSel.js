@@ -131,63 +131,48 @@ function mapSel_fetchMaps(isSearch = false, loadMore = false, isMyMaps = false) 
     let mapsRef = db.ref("MapsInfo");
     let query;
     
-    // Safely get the user's UID (adjust based on your auth setup)
     let currentUserUID = firebase.auth().currentUser ? firebase.auth().currentUser.uid : null;
 
-    // 1. Reset cursors if this is a brand new sort, search, or toggle
     if (!loadMore) {
         mapSel_lastNodeValue = null;
         mapSel_lastNodeKey = null;
         mapSel_isLastPage = false;
-        mapsTable.data = []; // Clear the table
+        mapsTable.data = [];
     }
 
     if (mapSel_isLastPage) return; 
 
-    // Fetch amount includes +1 when loading more to account for the overlapping cursor
     let fetchAmount = mapSel_pageSize + (loadMore ? 1 : 0); 
 
-    // ==========================================
-    // BRANCH 1: SIMPLIFIED "MY MAPS" LOGIC
-    // ==========================================
     if (isMyMaps) {
         if (!currentUserUID) {
             console.error("Cannot fetch user maps: No user logged in.");
             return;
         }
-
         query = mapsRef.orderByChild("creatorUID");
-
         if (loadMore && mapSel_lastNodeKey !== null) {
-            // Paginate: start exactly at this user's UID and the last map ID we saw.
-            // endAt ensures we don't accidentally spill over into another user's maps.
             query = query.startAt(currentUserUID, mapSel_lastNodeKey).endAt(currentUserUID).limitToFirst(fetchAmount);
         } else {
-            // First page: just grab the first batch of this user's maps
             query = query.equalTo(currentUserUID).limitToFirst(fetchAmount);
         }
-    } 
-    // ==========================================
-    // BRANCH 2: ORIGINAL LOGIC (All Maps, Search, Sort)
-    // ==========================================
-    else {
+    } else if (mapSel_mapType === "official") {
+        // Query ONLY official maps directly — no client-side filtering needed
+        query = mapsRef.orderByChild("official").equalTo(true);
+    } else {
         let isDescending = (!isSearch && (mapSel_sortBy === "dateCreated" || mapSel_sortBy === "completions"));
 
         if (isSearch) {
             let searchTerm = mapsTextInput.value().toLowerCase().trim();
             query = mapsRef.orderByChild("name_lower");
-            
             if (loadMore && mapSel_lastNodeValue) {
                 query = query.startAt(mapSel_lastNodeValue, mapSel_lastNodeKey).endAt(searchTerm + "\uf8ff");
             } else {
                 query = query.startAt(searchTerm).endAt(searchTerm + "\uf8ff");
             }
             query = query.limitToFirst(fetchAmount);
-
         } else {
             if (mapSel_sortBy === "none") return;
             query = mapsRef.orderByChild(mapSel_sortBy);
-
             if (isDescending) {
                 if (loadMore && mapSel_lastNodeValue !== null) {
                     query = query.endAt(mapSel_lastNodeValue, mapSel_lastNodeKey);
@@ -202,49 +187,36 @@ function mapSel_fetchMaps(isSearch = false, loadMore = false, isMyMaps = false) 
         }
     }
 
-    // 2. Fetch the batch!
     query.once("value", snapshot => {
         let fetchedMaps = [];
         
         snapshot.forEach(childSnapshot => {
             let mapData = childSnapshot.val();
-            
-            // Skip the official/community filter if the user is just looking at their own maps
-            if (!isMyMaps) {
-                if (mapSel_mapType === "community" && mapData.official === true) return;
-                if (mapSel_mapType === "official" && mapData.official !== true) return;
-            }
-            
+            // Community tab still needs client-side filter to exclude official maps
+            if (!isMyMaps && mapSel_mapType === "community" && mapData.official === true) return;
             mapData.id = childSnapshot.key;
             fetchedMaps.push(mapData);
         });
 
-        // If we were sorting descending in the "All Maps" view, we need to flip the array
         let isDescendingAllMaps = (!isMyMaps && !isSearch && (mapSel_sortBy === "dateCreated" || mapSel_sortBy === "completions"));
         if (isDescendingAllMaps) fetchedMaps.reverse();
 
-        // 3. Drop the overlapping cursor item if we are loading the next page
         if (loadMore && fetchedMaps.length > 0) fetchedMaps.shift(); 
 
-        // 4. Check if we reached the end of the database
         if (fetchedMaps.length < mapSel_pageSize) {
             mapSel_isLastPage = true;
         }
 
-        // 5. Save the cursor for the NEXT time they click "Load More"
         if (fetchedMaps.length > 0) {
             let lastItem = fetchedMaps[fetchedMaps.length - 1];
             mapSel_lastNodeKey = lastItem.id;
-            
-            // Set the value cursor (only strictly needed for the original logic, but safe to set)
             if (!isMyMaps) {
                 mapSel_lastNodeValue = isSearch ? lastItem.name_lower : lastItem[mapSel_sortBy];
             }
         }
 
-        // 6. Format and append to the existing table data
-        let newTableData
-        if(mapSel_mapType != "user"){
+        let newTableData;
+        if (mapSel_mapType != "user") {
             newTableData = fetchedMaps.map(m => ({
                 "Name": m.name,
                 "Creator": m.creator,
@@ -253,7 +225,7 @@ function mapSel_fetchMaps(isSearch = false, loadMore = false, isMyMaps = false) 
                 "Play": {"PLAY MAP": () => mapSel_loadMapByID(m.id)},
                 "Leaderboard": m.completions == 0 ? "No Completions" : {"VIEW LEADERBOARD": () => viewLeaderboard(m.id)}
             }));
-        }else{
+        } else {
             newTableData = fetchedMaps.map(m => ({
                 "Name": m.name,
                 "Completions": m.completions,
@@ -263,9 +235,7 @@ function mapSel_fetchMaps(isSearch = false, loadMore = false, isMyMaps = false) 
                 "Leaderboard": m.completions == 0 ? "No Completions" : {"VIEW LEADERBOARD": () => viewLeaderboard(m.id)}
             }));
         }
-        
 
-        // Combine the old data with the newly loaded data!
         mapsTable.data = mapsTable.data.concat(newTableData);
     });
 }
